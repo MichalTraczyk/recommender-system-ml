@@ -1,0 +1,22 @@
+name: recommender-ml
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.13
+  - jupyterlab
+  - ipykernel
+  - numpy
+  - pandas
+  - scikit-learn
+  - matplotlib
+  - kedro
+  - kedro-datasets[pandas]
+  - pyarrow
+  - pip
+  - pip:
+      - pre-commit
+      - ruff
+      - black
+      - pytest
+      - wandb
