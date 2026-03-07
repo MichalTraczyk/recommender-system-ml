@@ -50,3 +50,6 @@ attr = "recommender_ml.__version__"
 [tool.setuptools.packages.find]
 where = [ "src",]
 namespaces = false
+
+[tool.kedro_telemetry]
+project_id = "ea33f95cbba544a7bcbd1927df74e934"
