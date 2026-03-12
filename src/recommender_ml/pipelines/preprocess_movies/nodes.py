@@ -27,10 +27,17 @@ def encode_all_genres(df, genre_col='genres'):
     genre_dummies = df[genre_col].str.get_dummies(sep='|')
     genre_dummies = genre_dummies.add_prefix('genre_')
     df = pd.concat([df, genre_dummies], axis=1)
+    df.drop(genre_col, axis=1, inplace=True)
+    #swap id column with title column, just for easier analysis later
+    cols = list(df.columns)
+    a, b = cols.index('title'), cols.index('id')
+    cols[b], cols[a] = cols[a], cols[b]
+    df = df[cols]
+
     genre_column_names = list(genre_dummies.columns)
+    genre_df = pd.DataFrame({"genre_columns": genre_column_names})
 
     logger = get_logger()
     preview_cols = ['movieId', 'title', 'year', 'id'] + genre_column_names[:3]
     logger.info(f"\n--- Output of encode_all_genres ---\nShape: {df.shape}\n{df[preview_cols].head(3).to_string()}\n")
-
-    return df, genre_column_names
+    return df, genre_df

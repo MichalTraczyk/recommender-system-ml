@@ -6,14 +6,49 @@ raw_ratings:
   type: pandas.CSVDataset
   filepath: data/01_raw/ratings.csv
 
+#preprocessed_movies:
+#  type: pandas.ParquetDataset
+#  filepath: data/02_intermediate/preprocessed_movies.parquet
+#
+#genre_column_list:
+#  type: pickle.PickleDataset
+#  filepath: data/02_intermediate/genre_column_list.pkl
+#
+#user_timelines:
+#  type: pandas.ParquetDataset
+#  filepath: data/02_intermediate/user_timelines.parquet
 preprocessed_movies:
-  type: pandas.ParquetDataset
-  filepath: data/02_intermediate/preprocessed_movies.parquet
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/preprocessed_movies.csv
+  fs_args:
+    open_args_load:
+      encoding: utf-8
+    open_args_save:
+      encoding: utf-8
+  save_args:
+    index: False
+    lineterminator: "\n"
 
 genre_column_list:
-  type: pickle.PickleDataset
-  filepath: data/02_intermediate/genre_column_list.pkl
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/genre_column_list.csv
+  fs_args:
+    open_args_load:
+      encoding: utf-8
+    open_args_save:
+      encoding: utf-8
+  save_args:
+    index: False
+    lineterminator: "\n"
 
 user_timelines:
-  type: pandas.ParquetDataset
-  filepath: data/02_intermediate/user_timelines.parquet
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/user_timelines.csv
+  fs_args:
+    open_args_load:
+      encoding: utf-8
+    open_args_save:
+      encoding: utf-8
+  save_args:
+    index: False
+    lineterminator: "\n"
