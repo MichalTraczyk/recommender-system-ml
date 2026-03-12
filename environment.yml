@@ -3,19 +3,21 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.13
+  - python=3.12
   - jupyterlab
   - ipykernel
-  - numpy
+  - numpy<2.0.0
   - pandas
   - seaborn
   - scikit-learn
   - matplotlib
   - kedro
-  - kedro-datasets[pandas]
+  - kedro-datasets
   - pyarrow
   - pip
   - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu128
+      - torch==2.7.1+cu128
       - pre-commit
       - ruff
       - black
