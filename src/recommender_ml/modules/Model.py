@@ -1,11 +1,18 @@
 import torch
 import torch.nn as nn
-class TrainableMovieRecommender(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.movie_embedding = nn.Embedding(num_embeddings=10000, embedding_dim=100)
-        self.genre_embedding = nn.Embedding(num_embeddings=20, embedding_dim=30)
 
+
+class BaselineMovieRecommender(nn.Module):
+    def __init__(self, num_movies, num_genres):
+        super().__init__()
+        self.movie_embedding = nn.Embedding(num_embeddings=num_movies, embedding_dim=100)
+
+        self.genre_embedding = nn.EmbeddingBag(
+            num_embeddings=num_genres,
+            embedding_dim=30,
+            mode='mean',
+            padding_idx=0
+        )
         transformer_block = nn.TransformerEncoderLayer(d_model=130, nhead=10, batch_first=True)
 
         self.transformer = nn.TransformerEncoder(transformer_block, num_layers=3)
