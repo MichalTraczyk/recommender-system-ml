@@ -52,3 +52,22 @@ user_timelines:
   save_args:
     index: False
     lineterminator: "\n"
+
+
+trained_recommender_model:
+  type: pickle.PickleDataset
+  filepath: data/06_models/baseline_model.pkl
+
+movie_embeddings_csv:
+  type: pandas.CSVDataset
+  filepath: data/06_models/movie_embeddings.csv
+  save_args:
+    index: False
+    lineterminator: "\n"
+
+genre_embeddings_csv:
+  type: pandas.CSVDataset
+  filepath: data/06_models/genre_embeddings.csv
+  save_args:
+    index: False
+    lineterminator: "\n"
