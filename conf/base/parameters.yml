@@ -1,4 +1,4 @@
-num_movies: 10000
+num_movies: 100000
 num_genres: 25
 
 model_training:

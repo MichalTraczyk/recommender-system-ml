@@ -6,7 +6,7 @@ def get_logger():
     return logging.getLogger(__name__)
 
 def remap_ids(df):
-    df['id'] = range(len(df))
+    df['id'] = range(1, len(df) + 1)
     logger = get_logger()
     logger.info(f"\n--- Output of remap_ids ---\nShape: {df.shape}\n{df.head(3).to_string()}\n")
     return df
