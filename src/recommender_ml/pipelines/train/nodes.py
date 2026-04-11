@@ -38,7 +38,7 @@ def prepare_dataloader(user_timelines: pd.DataFrame, parameters: dict) -> DataLo
 
             pad_len = max_seq_len - len(context_movies)
             padded_movies = ([0] * pad_len) + context_movies
-            padded_genres = ([[0] * max_genres] * pad_len) + context_genres
+            padded_genres = [[0] * max_genres for _ in range(pad_len)] + context_genres
 
             X_movies.append(padded_movies)
             X_genres.append(padded_genres)
@@ -52,12 +52,17 @@ def prepare_dataloader(user_timelines: pd.DataFrame, parameters: dict) -> DataLo
         torch.tensor(Y_targets, dtype=torch.long)
     )
 
-    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(dataset,
+                              batch_size=batch_size,
+                              shuffle=True,
+                              num_workers=8,
+                              pin_memory=True)
     logger.info(f"Total Batches: {len(train_loader)}")
 
     return train_loader
 
-
+def bpr_loss(pos_scores, neg_scores):
+    return -torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-8).mean()
 def train_recommender_node(
         train_loader: torch.utils.data.DataLoader,
         num_movies: int,
@@ -69,10 +74,13 @@ def train_recommender_node(
     lr = parameters.get("learning_rate", 0.001)
     epochs = parameters.get("epochs", 5)
 
-    model = BaselineMovieRecommender(num_movies=num_movies, num_genres=num_genres,max_seq_len=max_seq_len)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    criterion = nn.CrossEntropyLoss()
+    model = BaselineMovieRecommender(num_movies=num_movies, num_genres=num_genres,max_seq_len=max_seq_len)
+    print(f"Starting training on: {device}")
+    model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=1)
 
     model.train()
     logger.info(f"Starting training for {epochs} epochs.")
@@ -87,12 +95,20 @@ def train_recommender_node(
         )
 
         for movie_seq, genre_seq, target_movie in progress_bar:
+            movie_seq = movie_seq.to(device)
+            genre_seq = genre_seq.to(device)
+            target_movie = target_movie.to(device)
+
             optimizer.zero_grad()
             user_vector = model(movie_seq, genre_seq)
             real_movie_embeddings = model.movie_embedding.weight[1:]
             logits = torch.matmul(user_vector, real_movie_embeddings.T)
-            loss = criterion(logits, target_movie-1)
 
+            pos_scores = logits.gather(1, (target_movie - 1).unsqueeze(1)).squeeze(1)
+            neg_ids = torch.randint(0, logits.size(1), target_movie.shape, device=device)
+            neg_scores = logits.gather(1, neg_ids.unsqueeze(1)).squeeze(1)
+
+            loss = bpr_loss(pos_scores, neg_scores)
             loss.backward()
             optimizer.step()
 
@@ -100,6 +116,7 @@ def train_recommender_node(
             progress_bar.set_postfix(loss=f"{loss.item():.4f}")
 
         avg_loss = total_loss / len(train_loader)
+        scheduler.step(avg_loss)
         logger.info(f"Epoch {epoch + 1}/{epochs} | Average Loss: {avg_loss:.4f}")
 
     logger.info("Training complete")

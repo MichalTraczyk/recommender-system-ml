@@ -2,7 +2,8 @@ num_movies: 100000
 num_genres: 25
 
 model_training:
-  learning_rate: 0.001
-  epochs: 10
+  learning_rate: 0.0003
+  epochs: 5
   max_sequence_length: 10
   max_genres: 3
+  batch_size: 256
