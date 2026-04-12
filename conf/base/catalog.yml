@@ -107,3 +107,17 @@ kfold_results:
 production_model:
   type: pickle.PickleDataset
   filepath: data/06_models/production_model.pkl
+
+baseline_evaluation_results:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/baseline_evaluation_results.csv
+  save_args:
+    index: False
+    lineterminator: "\n"
+
+production_evaluation_results:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/production_evaluation_results.csv
+  save_args:
+    index: False
+    lineterminator: "\n"
