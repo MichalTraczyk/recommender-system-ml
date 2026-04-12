@@ -10,3 +10,5 @@ model_training:
   max_sequence_length: 10
   max_genres: 3
   batch_size: 256
+
+n_folds: 5
