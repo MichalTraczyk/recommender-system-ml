@@ -6,7 +6,7 @@ def create_pipeline(**kwargs) -> Pipeline:
     return pipeline([
         node(
             func=prepare_dataloader,
-            inputs=["user_timelines", "params:model_training"],  # Just the single dataframe now!
+            inputs=["user_timelines_train", "params:model_training"],
             outputs="train_dataloader",
             name="prepare_dataloader_node"
         ),
@@ -19,7 +19,6 @@ def create_pipeline(**kwargs) -> Pipeline:
                 "params:model_training"
             ],
             outputs="trained_recommender_model",
-            name="train_recommender_model_node",
-            tags=["training", "pytorch"]
+            name="train_recommender_model_node"
         )
     ])

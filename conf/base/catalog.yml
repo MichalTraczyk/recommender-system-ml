@@ -54,6 +54,30 @@ user_timelines:
     lineterminator: "\n"
 
 
+user_timelines_train:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/user_timelines_train.csv
+  fs_args:
+    open_args_load:
+      encoding: utf-8
+    open_args_save:
+      encoding: utf-8
+  save_args:
+    index: False
+    lineterminator: "\n"
+
+user_timelines_test:
+  type: pandas.CSVDataset
+  filepath: data/02_intermediate/user_timelines_test.csv
+  fs_args:
+    open_args_load:
+      encoding: utf-8
+    open_args_save:
+      encoding: utf-8
+  save_args:
+    index: False
+    lineterminator: "\n"
+
 trained_recommender_model:
   type: pickle.PickleDataset
   filepath: data/06_models/baseline_model.pkl

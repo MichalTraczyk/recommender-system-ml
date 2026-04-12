@@ -1,6 +1,6 @@
 from kedro.pipeline import Node, Pipeline
 
-from .nodes import merge_movie_ids, build_user_timelines, enrich_user_timelines
+from .nodes import merge_movie_ids, build_user_timelines, enrich_user_timelines, split_user_timelines
 
 
 def create_pipeline(**kwargs) -> Pipeline:
@@ -23,6 +23,12 @@ def create_pipeline(**kwargs) -> Pipeline:
                 inputs=["user_movie_timeline","preprocessed_movies","parameters"],
                 outputs="user_timelines",
                 name="enrich_user_timelines_node"
+            ),
+            Node(
+                func=split_user_timelines,
+                inputs=["user_timelines", "parameters"],
+                outputs=["user_timelines_train", "user_timelines_test"],
+                name="split_user_timelines_node",
             )
         ]
     )

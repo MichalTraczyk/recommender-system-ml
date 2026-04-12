@@ -60,3 +60,17 @@ def enrich_user_timelines(
         f"\n--- Output of enrich_user_timelines ---\nShape: {user_timelines.shape}\n{user_timelines[['userId', 'movie_sequence', 'genre_sequence']].head(3).to_string()}\n")
 
     return user_timelines
+
+
+def split_user_timelines(timelines: pd.DataFrame, parameters: dict):
+    test_size = parameters.get("test_size", 0.2)
+    seed = parameters.get("random_seed", 42)
+
+    train_idx = timelines.sample(frac=1 - test_size, random_state=seed).index
+    train = timelines.loc[train_idx].reset_index(drop=True)
+    test = timelines.drop(train_idx).reset_index(drop=True)
+
+    logger = get_logger()
+    logger.info(f"Train users: {len(train)}, Test users: {len(test)}")
+
+    return train, test
