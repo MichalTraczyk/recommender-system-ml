@@ -55,11 +55,11 @@ def prepare_dataloader(user_timelines: pd.DataFrame, parameters: dict) -> DataLo
     batch_size = parameters.get("batch_size", 256)
     max_seq_len = parameters.get("max_sequence_length", 10)
     max_genres = parameters.get("max_genres", 3)
-    min_seq_len = parameters.get("min_sequence_length", 2)
+    min_seq_len = parameters.get("min_sequence_length", 5)
 
     X_movies, X_genres, Y_targets = [], [], []
 
-    logger.info("Creating dataloader")
+    logger.info(f"Creating dataloader batchsize: {batch_size}")
 
     for _, row in user_timelines.iterrows():
         m_seq = ast.literal_eval(row['movie_sequence']) if isinstance(row['movie_sequence'], str) else row[
@@ -94,7 +94,7 @@ def prepare_dataloader(user_timelines: pd.DataFrame, parameters: dict) -> DataLo
     train_loader = DataLoader(dataset,
                               batch_size=batch_size,
                               shuffle=True,
-                              num_workers=8,
+                              num_workers=4,
                               pin_memory=True)
     logger.info(f"Total Batches: {len(train_loader)}")
 
@@ -291,6 +291,7 @@ def train_final_model(
         prepare_dataloader_fn
 ) -> nn.Module:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Starting training on device: {device}")
     train_loader = prepare_dataloader_fn(user_timelines, parameters)
     max_sequence_len = parameters.get("max_sequence_length", 10)
     model = build_model(num_movies, num_genres, max_sequence_len, device)

@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 
 def kfold_and_final_training(
         user_timelines_train: pd.DataFrame,
-        num_movies: int,
-        num_genres: int,
         parameters: dict
 ) -> tuple[pd.DataFrame, nn.Module]:
+    num_movies = parameters.get("num_movies")
+    num_genres = parameters.get("num_genres")
 
     results_df = run_kfold(
         user_timelines_train,
