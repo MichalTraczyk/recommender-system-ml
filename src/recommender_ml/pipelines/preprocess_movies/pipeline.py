@@ -1,5 +1,5 @@
 from kedro.pipeline import Node, Pipeline
-from .nodes import extract_year, remap_ids, encode_all_genres
+from .nodes import extract_year, remap_ids, encode_all_genres, add_links, add_poster_urls
 
 
 def create_pipeline(**kwargs) -> Pipeline:
@@ -20,8 +20,19 @@ def create_pipeline(**kwargs) -> Pipeline:
             Node(
                 func=encode_all_genres,
                 inputs="movies_with_year",
-                outputs=["preprocessed_movies", "genre_column_list"],
+                outputs=["movies_with_genres", "genre_column_list"],
                 name="encode_all_genres_node"
+            ),
+            Node(
+                func=add_links,
+                inputs=["movies_with_genres", "links"],
+                outputs="movies_with_links",
+                name="add_links_node"
+            ),
+            Node(
+                func=add_poster_urls,
+                inputs=["movies_with_links"],
+                outputs="preprocessed_movies",
             )
         ]
     )
