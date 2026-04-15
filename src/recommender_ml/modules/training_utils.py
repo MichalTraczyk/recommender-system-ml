@@ -8,19 +8,47 @@ from tqdm import tqdm
 from sklearn.model_selection import KFold
 from torch.utils.data import DataLoader, TensorDataset
 from recommender_ml.modules.Model import BaselineMovieRecommender
-
+from recommender_ml.modules.ModelProd import ProdMovieRecommender
 
 logger = logging.getLogger(__name__)
 
-def bpr_loss(pos_scores: torch.Tensor, neg_scores: torch.Tensor) -> torch.Tensor:
-    return -torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-8).mean()
+def bpr_loss_multi_neg(
+        user_vector: torch.Tensor,
+        target_movie: torch.Tensor,
+        movie_embedding: nn.Embedding,
+        num_neg_samples: int = 50,
+) -> torch.Tensor:
+    pos_emb = movie_embedding(target_movie)
+    pos_scores = (user_vector * pos_emb).sum(dim=-1)
+
+    batch_size = target_movie.size(0)
+    num_movies = movie_embedding.num_embeddings - 1
+
+    neg_ids = torch.randint(1, num_movies + 1,
+                            (batch_size, num_neg_samples),
+                            device=target_movie.device)
+
+    collision = (neg_ids == target_movie.unsqueeze(1))
+    fallback = torch.where(target_movie == 1,
+                           torch.tensor(2, device=target_movie.device),
+                           torch.tensor(1, device=target_movie.device))
+    neg_ids[collision] = fallback.unsqueeze(1).expand_as(neg_ids)[collision]
+
+    neg_emb = movie_embedding(neg_ids)
+    neg_scores = torch.bmm(neg_emb, user_vector.unsqueeze(-1)).squeeze(-1)
+
+    return -torch.log(
+        torch.sigmoid(pos_scores.unsqueeze(1) - neg_scores) + 1e-8
+    ).mean()
+
 
 def run_single_epoch(
         model: nn.Module,
         loader: DataLoader,
         optimizer: torch.optim.Optimizer,
         device: torch.device,
-        epoch_label: str = "Epoch"
+        epoch_label: str = "Epoch",
+        num_neg_samples: int = 50,
 ) -> float:
     model.train()
     total_loss = 0.0
@@ -34,13 +62,8 @@ def run_single_epoch(
         optimizer.zero_grad()
 
         user_vector = model(movie_seq, genre_seq)
-        logits = torch.matmul(user_vector, model.movie_embedding.weight[1:].T)
+        loss = bpr_loss_multi_neg(user_vector, target_movie, model.movie_embedding, num_neg_samples)
 
-        pos_scores = logits.gather(1, (target_movie - 1).unsqueeze(1)).squeeze(1)
-        neg_ids = torch.randint(0, logits.size(1), target_movie.shape, device=device)
-        neg_scores = logits.gather(1, neg_ids.unsqueeze(1)).squeeze(1)
-
-        loss = bpr_loss(pos_scores, neg_scores)
         loss.backward()
         optimizer.step()
 
@@ -104,7 +127,8 @@ def prepare_dataloader(user_timelines: pd.DataFrame, parameters: dict) -> DataLo
 def run_validation_epoch(
         model: nn.Module,
         loader: DataLoader,
-        device: torch.device
+        device: torch.device,
+        num_neg_samples: int = 50,
 ) -> float:
     model.eval()
     total_loss = 0.0
@@ -116,13 +140,8 @@ def run_validation_epoch(
             target_movie = target_movie.to(device)
 
             user_vector = model(movie_seq, genre_seq)
-            logits = torch.matmul(user_vector, model.movie_embedding.weight[1:].T)
-
-            pos_scores = logits.gather(1, (target_movie - 1).unsqueeze(1)).squeeze(1)
-            neg_ids = torch.randint(0, logits.size(1), target_movie.shape, device=device)
-            neg_scores = logits.gather(1, neg_ids.unsqueeze(1)).squeeze(1)
-
-            total_loss += bpr_loss(pos_scores, neg_scores).item()
+            loss = bpr_loss_multi_neg(user_vector, target_movie, model.movie_embedding, num_neg_samples)
+            total_loss += loss.item()
 
     return total_loss / len(loader)
 
@@ -155,13 +174,22 @@ def build_model(
         num_movies: int,
         num_genres: int,
         max_seq_len: int,
-        device: torch.device
+        device: torch.device,
+        model_type: str
 ) -> nn.Module:
-    model = BaselineMovieRecommender(
-        num_movies=num_movies,
-        num_genres=num_genres,
-        max_seq_len=max_seq_len
-    )
+
+    if model_type == "baseline":
+        model = BaselineMovieRecommender(
+            num_movies=num_movies,
+            num_genres=num_genres,
+            max_seq_len=max_seq_len
+        )
+    else:
+        model = ProdMovieRecommender(
+            num_movies=num_movies,
+            num_genres=num_genres,
+            max_seq_len=max_seq_len
+        )
     model.to(device)
     return model
 
@@ -193,7 +221,7 @@ def train_with_early_stopping(
     train_loader = prepare_dataloader_fn(train_df, parameters)
     val_loader = prepare_dataloader_fn(val_df, parameters)
 
-    model = build_model(num_movies, num_genres, max_sequence_len, device)
+    model = build_model(num_movies, num_genres, max_sequence_len, device,"prod")
     optimizer, scheduler = build_optimizer(model, parameters)
 
     best_val_loss = float('inf')
@@ -294,7 +322,7 @@ def train_final_model(
     print(f"Starting training on device: {device}")
     train_loader = prepare_dataloader_fn(user_timelines, parameters)
     max_sequence_len = parameters.get("max_sequence_length", 10)
-    model = build_model(num_movies, num_genres, max_sequence_len, device)
+    model = build_model(num_movies, num_genres, max_sequence_len, device, "prod")
 
     optimizer, _ = build_optimizer(model, parameters)
 

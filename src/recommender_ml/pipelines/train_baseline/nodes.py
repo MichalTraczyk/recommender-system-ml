@@ -7,7 +7,6 @@ import torch.optim as optim
 import ast
 
 from recommender_ml.modules.training_utils import (
-    bpr_loss,
     build_model,
     build_optimizer,
     run_single_epoch,
@@ -26,7 +25,7 @@ def train_recommender_node(
 
     logger.info(f"Starting baseline training on: {device}")
 
-    model = build_model(num_movies, num_genres, parameters, device)
+    model = build_model(num_movies, num_genres, parameters.get("max_sequence_length"), device, "baseline")
     optimizer, scheduler = build_optimizer(model, parameters)
 
     for epoch in range(epochs):

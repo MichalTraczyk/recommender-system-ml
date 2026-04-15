@@ -12,6 +12,7 @@ dependencies:
   - scikit-learn
   - matplotlib
   - kedro
+  - dotenv
   - kedro-datasets
   - pyarrow
   - tqdm
