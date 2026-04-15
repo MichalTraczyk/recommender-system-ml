@@ -1,3 +1,9 @@
+data/01_raw/*
+data/02_intermediate/*
+data/06_models/*
+data/08_reporting/*
+!data/**/.gitkeep
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
