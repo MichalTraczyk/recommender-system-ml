@@ -1,4 +1,4 @@
-learning_rate: 0.0012
+learning_rate: 0.0005
 epochs: 5
 max_sequence_length: 10
 max_genres: 3

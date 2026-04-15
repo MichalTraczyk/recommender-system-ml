@@ -82,21 +82,6 @@ trained_recommender_model:
   type: pickle.PickleDataset
   filepath: data/06_models/baseline_model.pkl
 
-movie_embeddings_csv:
-  type: pandas.CSVDataset
-  filepath: data/06_models/movie_embeddings.csv
-  save_args:
-    index: False
-    lineterminator: "\n"
-
-genre_embeddings_csv:
-  type: pandas.CSVDataset
-  filepath: data/06_models/genre_embeddings.csv
-  save_args:
-    index: False
-    lineterminator: "\n"
-
-
 kfold_results:
   type: pandas.CSVDataset
   filepath: data/08_reporting/kfold_results.csv
@@ -121,3 +106,32 @@ production_evaluation_results:
   save_args:
     index: False
     lineterminator: "\n"
+
+
+movie_embeddings_csv:
+  type: pandas.CSVDataset
+  filepath: data/06_models/movie_embeddings.csv
+  fs_args:
+    open_args_save:
+      encoding: "utf-8"
+    open_args_load:
+      encoding: "utf-8"
+  save_args:
+    index: False
+    lineterminator: "\n"
+
+genre_embeddings_csv:
+  type: pandas.CSVDataset
+  filepath: data/06_models/genre_embeddings.csv
+  fs_args:
+    open_args_save:
+      encoding: "utf-8"
+    open_args_load:
+      encoding: "utf-8"
+  save_args:
+    index: False
+    lineterminator: "\n"
+
+onnx_model_path:
+  type: pickle.PickleDataset
+  filepath: data/06_models/onnx_model_path.pkl
