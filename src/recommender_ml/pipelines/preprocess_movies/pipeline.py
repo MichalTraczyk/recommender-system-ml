@@ -1,5 +1,5 @@
 from kedro.pipeline import Node, Pipeline
-from .nodes import extract_year, remap_ids, encode_all_genres, add_links, add_poster_urls
+from .nodes import extract_year, remap_ids, encode_all_genres, add_links, add_poster_urls, compute_popularity_scores
 
 
 def create_pipeline(**kwargs) -> Pipeline:
@@ -30,8 +30,14 @@ def create_pipeline(**kwargs) -> Pipeline:
                 name="add_links_node"
             ),
             Node(
+                func=compute_popularity_scores,
+                inputs=["movies_with_links", "raw_ratings", "user_timelines"],
+                outputs="movies_with_popularity_scores",
+                name="compute_popularity_scores_node"
+            ),
+            Node(
                 func=add_poster_urls,
-                inputs=["movies_with_links"],
+                inputs=["movies_with_popularity_scores"],
                 outputs="preprocessed_movies",
             )
         ]

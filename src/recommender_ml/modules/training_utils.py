@@ -1,5 +1,7 @@
 import ast
 import logging
+import os
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -52,6 +54,7 @@ def run_single_epoch(
 ) -> float:
     model.train()
     total_loss = 0.0
+    scaler = torch.cuda.amp.GradScaler(enabled=device.type == "cuda")
     progress_bar = tqdm(loader, desc=epoch_label, unit="batch")
 
     for movie_seq, genre_seq, target_movie in progress_bar:
@@ -61,16 +64,49 @@ def run_single_epoch(
 
         optimizer.zero_grad()
 
-        user_vector = model(movie_seq, genre_seq)
-        loss = bpr_loss_multi_neg(user_vector, target_movie, model.movie_embedding, num_neg_samples)
+        with torch.autocast(device_type=device.type, enabled=device.type == "cuda"):
+            user_vector = model(movie_seq, genre_seq)
+            loss = bpr_loss_multi_neg(user_vector, target_movie, model.movie_embedding, num_neg_samples)
 
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         total_loss += loss.item()
         progress_bar.set_postfix(loss=f"{loss.item():.4f}")
 
     return total_loss / len(loader)
+
+def save_checkpoint(
+        model: nn.Module,
+        optimizer: torch.optim.Optimizer,
+        epoch: int,
+        loss: float,
+        path: str
+) -> None:
+    torch.save({
+        "epoch": epoch,
+        "model_state": model.state_dict(),
+        "optimizer_state": optimizer.state_dict(),
+        "loss": loss,
+    }, path)
+    logger.info(f"Checkpoint saved → {path}")
+
+
+def load_checkpoint(
+        model: nn.Module,
+        optimizer: torch.optim.Optimizer,
+        path: str,
+        device: torch.device
+) -> tuple[int, float]:
+    checkpoint = torch.load(path, map_location=device)
+    model.load_state_dict(checkpoint["model_state"])
+    optimizer.load_state_dict(checkpoint["optimizer_state"])
+    start_epoch = checkpoint["epoch"] + 1
+    loss = checkpoint["loss"]
+    logger.info(f"Resumed from checkpoint {path} (epoch {start_epoch}, loss {loss:.4f})")
+    return start_epoch, loss
+
 
 def prepare_dataloader(user_timelines: pd.DataFrame, parameters: dict) -> DataLoader:
     logger = logging.getLogger(__name__)
@@ -191,6 +227,10 @@ def build_model(
             max_seq_len=max_seq_len
         )
     model.to(device)
+
+    # if device.type == "cuda":
+    #     model = torch.compile(model)
+
     return model
 
 
@@ -216,20 +256,27 @@ def train_with_early_stopping(
     max_epochs = parameters.get("max_epochs", 20)
     patience = parameters.get("patience", 3)
     max_sequence_len = parameters.get("max_sequence_length", 10)
+    checkpoint_path = parameters.get("checkpoint_path", "checkpoints/early_stop.pt")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
 
     train_loader = prepare_dataloader_fn(train_df, parameters)
     val_loader = prepare_dataloader_fn(val_df, parameters)
 
-    model = build_model(num_movies, num_genres, max_sequence_len, device,"prod")
+    model = build_model(num_movies, num_genres, max_sequence_len, device, "prod")
     optimizer, scheduler = build_optimizer(model, parameters)
 
+    start_epoch = 0
     best_val_loss = float('inf')
     best_epoch = 0
     best_weights = None
     epochs_no_improve = 0
 
-    for epoch in range(max_epochs):
+    if os.path.exists(checkpoint_path):
+        start_epoch, best_val_loss = load_checkpoint(model, optimizer, checkpoint_path, device)
+
+    for epoch in range(start_epoch, max_epochs):
         avg_train_loss = run_single_epoch(
             model, train_loader, optimizer, device,
             epoch_label=f"Epoch {epoch + 1} [train]"
@@ -247,6 +294,7 @@ def train_with_early_stopping(
             best_epoch = epoch
             best_weights = {k: v.cpu().clone() for k, v in model.state_dict().items()}
             epochs_no_improve = 0
+            save_checkpoint(model, optimizer, epoch, avg_val_loss, checkpoint_path)
             logger.info(f"New best model at epoch {epoch + 1}")
         else:
             epochs_no_improve += 1
@@ -257,7 +305,6 @@ def train_with_early_stopping(
 
     model.load_state_dict({k: v.to(device) for k, v in best_weights.items()})
     return model, best_epoch + 1, best_val_loss
-
 
 def run_kfold(
         user_timelines: pd.DataFrame,
@@ -319,18 +366,25 @@ def train_final_model(
         prepare_dataloader_fn
 ) -> nn.Module:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Starting training on device: {device}")
+    checkpoint_path = parameters.get("final_checkpoint_path", "checkpoints/final.pt")
+    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+
+    logger.info(f"Starting final training on device: {device}")
     train_loader = prepare_dataloader_fn(user_timelines, parameters)
     max_sequence_len = parameters.get("max_sequence_length", 10)
     model = build_model(num_movies, num_genres, max_sequence_len, device, "prod")
-
     optimizer, _ = build_optimizer(model, parameters)
 
-    for epoch in range(num_epochs):
+    start_epoch = 0
+    if os.path.exists(checkpoint_path):
+        start_epoch, _ = load_checkpoint(model, optimizer, checkpoint_path, device)
+
+    for epoch in range(start_epoch, num_epochs):
         avg_loss = run_single_epoch(
             model, train_loader, optimizer, device,
             epoch_label=f"Final Epoch {epoch + 1}/{num_epochs}"
         )
+        save_checkpoint(model, optimizer, epoch, avg_loss, checkpoint_path)
         logger.info(f"Final Epoch {epoch + 1}/{num_epochs} | Loss: {avg_loss:.4f}")
 
     logger.info("Production model training complete")

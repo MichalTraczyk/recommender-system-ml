@@ -1,6 +1,8 @@
+import ast
 import logging
 import os
-
+import numpy as mn
+import numpy as np
 import pandas as pd
 import requests
 from tqdm import tqdm
@@ -84,3 +86,40 @@ def get_poster_url(tmdb_id, api_key):
         print(f"Error fetching ID {tmdb_id}: {e}")
 
     return None
+
+def compute_popularity_scores(
+    movies: pd.DataFrame,
+    ratings: pd.DataFrame,
+    user_timelines: pd.DataFrame
+) -> pd.DataFrame:
+    # --- Rating-based score ---
+    agg = ratings.groupby('movieId').agg(
+        avg_rating=('rating', 'mean'),
+        num_ratings=('rating', 'count')
+    ).reset_index()
+    agg['rating_score'] = agg['avg_rating'] * np.log1p(agg['num_ratings'])
+
+    # --- Watch frequency score ---
+    watch_counts = {}
+    for seq in user_timelines['movie_sequence']:
+        parsed = ast.literal_eval(seq) if isinstance(seq, str) else seq
+        for movie_id in parsed:
+            watch_counts[movie_id] = watch_counts.get(movie_id, 0) + 1
+
+    watch_df = pd.DataFrame(
+        watch_counts.items(), columns=['id', 'watch_count']  # 'id' = your remapped id
+    )
+
+    # --- Merge into movies ---
+    df = movies.merge(agg[['movieId', 'avg_rating', 'num_ratings', 'rating_score']],
+                      on='movieId', how='left')
+    df = df.merge(watch_df, on='id', how='left')
+
+    df['avg_rating'] = df['avg_rating'].fillna(0).round(2)
+    df['num_ratings'] = df['num_ratings'].fillna(0).astype(int)
+    df['rating_score'] = df['rating_score'].fillna(0).round(4)
+    df['watch_count'] = df['watch_count'].fillna(0).astype(int)
+
+    logger = get_logger()
+    logger.info(f"Popularity scores added. Top 5:\n{df.nlargest(5, 'watch_count')[['title', 'avg_rating', 'num_ratings', 'watch_count']].to_string()}")
+    return df

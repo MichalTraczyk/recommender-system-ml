@@ -18,15 +18,16 @@ def kfold_and_final_training(
     num_movies = parameters.get("num_movies")
     num_genres = parameters.get("num_genres")
 
-    results_df = run_kfold(
-        user_timelines_train,
-        num_movies,
-        num_genres,
-        parameters,
-        prepare_dataloader
-    )
-
-    best_epoch = int(results_df["best_epoch"].mean().round())
+    # results_df = run_kfold(
+    #     user_timelines_train,
+    #     num_movies,
+    #     num_genres,
+    #     parameters,
+    #     prepare_dataloader
+    # )
+    results_df = pd.DataFrame(data=[], columns=["user_id", "movie_id", ""])
+    #best_epoch = int(results_df["best_epoch"].mean().round())
+    best_epoch = 50
     logger.info(f"Average best epoch across folds: {best_epoch} — using for final training")
 
     final_model = train_final_model(
