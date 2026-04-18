@@ -1,9 +1,8 @@
 learning_rate: 0.0003
-epochs: 5
-max_sequence_length: 30
+max_sequence_length: 50
 max_genres: 3
-batch_size: 512
-min_sequence_length: 15
+batch_size: 1024
+min_sequence_length: 5
 max_epochs: 100
 patience: 5
 n_folds: 3

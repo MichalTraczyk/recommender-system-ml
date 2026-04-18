@@ -45,8 +45,8 @@ def export_onnx_model(
     import onnx
     import onnxruntime as ort
 
-    max_seq_len = parameters.get("max_sequence_length", 10)
-    combined_dim = 130  # 100 movie + 30 genre
+    max_seq_len = parameters.get("max_sequence_length", 30)
+    combined_dim = 256 + 64
     output_path = "data/06_models/production_model.onnx"
 
     wrapper = RecommenderFromEmbeddings(production_model)
@@ -62,7 +62,15 @@ def export_onnx_model(
         input_names=["combined_embeddings"],
         output_names=["user_vector"],
         opset_version=17,
-        dynamic_axes=None
+        dynamic_axes={
+            "combined_embeddings": {
+                0: "batch_size",
+                1: "seq_len"
+            },
+            "user_vector": {
+                0: "batch_size"
+            }
+        }
     )
     logger.info(f"ONNX model exported to {output_path}")
 

@@ -237,7 +237,7 @@ def build_optimizer(
     lr = parameters.get("learning_rate", 3e-4)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=1
+        optimizer, mode='min', factor=0.5, patience=3, min_lr=1e-6
     )
     return optimizer, scheduler
 
@@ -372,9 +372,6 @@ def train_final_model(
     optimizer, _ = build_optimizer(model, parameters)
 
     start_epoch = 0
-    best_loss = float('inf')
-    epochs_without_improvement = 0
-    patience = 3
 
     if os.path.exists(checkpoint_path):
         start_epoch, _ = load_checkpoint(model, optimizer, checkpoint_path, device)
@@ -384,22 +381,8 @@ def train_final_model(
             model, train_loader, optimizer, device,
             epoch_label=f"Final Epoch {epoch + 1}/{num_epochs}"
         )
+        save_checkpoint(model, optimizer, epoch, avg_loss, checkpoint_path)
         logger.info(f"Final Epoch {epoch + 1}/{num_epochs} | Loss: {avg_loss:.4f}")
-
-        if avg_loss < best_loss:
-            best_loss = avg_loss
-            epochs_without_improvement = 0
-            save_checkpoint(model, optimizer, epoch, avg_loss, checkpoint_path)
-
-            logger.info(f"New best loss achieved: {best_loss:.4f}")
-        else:
-            epochs_without_improvement += 1
-            logger.warning(f"No improvement in loss for {epochs_without_improvement} epoch(s).")
-
-        if epochs_without_improvement >= patience:
-            logger.info(f"Early stopping triggered. Training stopped after {epoch + 1} epochs.")
-            load_checkpoint(model, optimizer, checkpoint_path, device)
-            break
 
 
     logger.info("Production model training complete")
