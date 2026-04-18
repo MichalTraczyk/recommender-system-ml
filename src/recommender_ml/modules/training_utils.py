@@ -218,8 +218,7 @@ def build_model(
     else:
         model = ProdMovieRecommender(
             num_movies=num_movies,
-            num_genres=num_genres,
-            max_seq_len=max_seq_len
+            num_genres=num_genres
         )
     model.to(device)
 
