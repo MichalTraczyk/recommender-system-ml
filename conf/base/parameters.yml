@@ -1,10 +1,10 @@
-learning_rate: 0.001
+learning_rate: 0.0003
 epochs: 5
-max_sequence_length: 20
+max_sequence_length: 30
 max_genres: 3
 batch_size: 512
-min_sequence_length: 5
-max_epochs: 50
+min_sequence_length: 15
+max_epochs: 100
 patience: 5
 n_folds: 3
 num_movies: 70000

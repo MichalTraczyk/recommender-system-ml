@@ -15,33 +15,24 @@ from recommender_ml.modules.ModelProd import ProdMovieRecommender
 logger = logging.getLogger(__name__)
 
 def bpr_loss_multi_neg(
-        user_vector: torch.Tensor,
-        target_movie: torch.Tensor,
-        movie_embedding: nn.Embedding,
-        num_neg_samples: int = 50,
+    user_vector: torch.Tensor,
+    target_movie: torch.Tensor,
+    movie_embedding: nn.Embedding,
+    num_neg_samples: int = 50,
 ) -> torch.Tensor:
     pos_emb = movie_embedding(target_movie)
-    pos_scores = (user_vector * pos_emb).sum(dim=-1)
+    pos_scores = (user_vector * pos_emb).sum(dim=-1, keepdim=True) # [B, 1]
 
-    batch_size = target_movie.size(0)
-    num_movies = movie_embedding.num_embeddings - 1
-
-    neg_ids = torch.randint(1, num_movies + 1,
-                            (batch_size, num_neg_samples),
+    neg_ids = torch.randint(1, movie_embedding.num_embeddings, 
+                            (target_movie.size(0), num_neg_samples), 
                             device=target_movie.device)
+    
+    neg_emb = movie_embedding(neg_ids) # [B, N, D]
+    neg_scores = torch.bmm(neg_emb, user_vector.unsqueeze(-1)).squeeze(-1) # [B, N]
 
-    collision = (neg_ids == target_movie.unsqueeze(1))
-    fallback = torch.where(target_movie == 1,
-                           torch.tensor(2, device=target_movie.device),
-                           torch.tensor(1, device=target_movie.device))
-    neg_ids[collision] = fallback.unsqueeze(1).expand_as(neg_ids)[collision]
-
-    neg_emb = movie_embedding(neg_ids)
-    neg_scores = torch.bmm(neg_emb, user_vector.unsqueeze(-1)).squeeze(-1)
-
-    return -torch.log(
-        torch.sigmoid(pos_scores.unsqueeze(1) - neg_scores) + 1e-8
-    ).mean()
+    # Stable BPR using softplus: -log(sigmoid(x)) == softplus(-x)
+    diff = pos_scores - neg_scores
+    return torch.nn.functional.softplus(-diff).mean()
 
 
 def run_single_epoch(
@@ -69,6 +60,10 @@ def run_single_epoch(
             loss = bpr_loss_multi_neg(user_vector, target_movie, model.movie_embedding, num_neg_samples)
 
         scaler.scale(loss).backward()
+
+        scaler.unscale_(optimizer) # Required for AMP before clipping
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        
         scaler.step(optimizer)
         scaler.update()
 
@@ -112,9 +107,9 @@ def prepare_dataloader(user_timelines: pd.DataFrame, parameters: dict) -> DataLo
     logger = logging.getLogger(__name__)
 
     batch_size = parameters.get("batch_size", 256)
-    max_seq_len = parameters.get("max_sequence_length", 10)
+    max_seq_len = parameters.get("max_sequence_length", 30)
     max_genres = parameters.get("max_genres", 3)
-    min_seq_len = parameters.get("min_sequence_length", 5)
+    min_seq_len = parameters.get("min_sequence_length", 15)
 
     X_movies, X_genres, Y_targets = [], [], []
 
@@ -229,6 +224,7 @@ def build_model(
     model.to(device)
 
     # if device.type == "cuda":
+    #     print("Using compiled model")
     #     model = torch.compile(model)
 
     return model
@@ -376,6 +372,10 @@ def train_final_model(
     optimizer, _ = build_optimizer(model, parameters)
 
     start_epoch = 0
+    best_loss = float('inf')
+    epochs_without_improvement = 0
+    patience = 3
+
     if os.path.exists(checkpoint_path):
         start_epoch, _ = load_checkpoint(model, optimizer, checkpoint_path, device)
 
@@ -384,8 +384,23 @@ def train_final_model(
             model, train_loader, optimizer, device,
             epoch_label=f"Final Epoch {epoch + 1}/{num_epochs}"
         )
-        save_checkpoint(model, optimizer, epoch, avg_loss, checkpoint_path)
         logger.info(f"Final Epoch {epoch + 1}/{num_epochs} | Loss: {avg_loss:.4f}")
+
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            epochs_without_improvement = 0
+            save_checkpoint(model, optimizer, epoch, avg_loss, checkpoint_path)
+
+            logger.info(f"New best loss achieved: {best_loss:.4f}")
+        else:
+            epochs_without_improvement += 1
+            logger.warning(f"No improvement in loss for {epochs_without_improvement} epoch(s).")
+
+        if epochs_without_improvement >= patience:
+            logger.info(f"Early stopping triggered. Training stopped after {epoch + 1} epochs.")
+            load_checkpoint(model, optimizer, checkpoint_path, device)
+            break
+
 
     logger.info("Production model training complete")
     return model
