@@ -13,7 +13,7 @@ class ProdMovieRecommender(nn.Module):
         self.input_norm = nn.LayerNorm(self.d_model)
         self.genre_embedding = nn.EmbeddingBag(num_embeddings=num_genres, embedding_dim=64, mode='mean', padding_idx=0)
         transformer_block = nn.TransformerEncoderLayer(d_model=self.d_model, nhead=8, batch_first=True, dropout=0.2)
-        self.transformer = nn.TransformerEncoder(transformer_block, num_layers=2)
+        self.transformer = nn.TransformerEncoder(transformer_block, num_layers=2,enable_nested_tensor=False)
         self.input_proj = nn.Linear(in_features=256 + 64, out_features=256)
         self.output_head = nn.Sequential(
             nn.Linear(self.d_model, self.d_model),

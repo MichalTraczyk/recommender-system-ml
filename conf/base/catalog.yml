@@ -110,6 +110,13 @@ production_evaluation_results:
     index: False
     lineterminator: "\n"
 
+onnx_metrics:
+  type: pandas.CSVDataset
+  filepath: data/08_reporting/onnx_evaluation_results.csv
+  save_args:
+    index: False
+    lineterminator: "\n"
+
 
 movie_embeddings_csv:
   type: pandas.CSVDataset

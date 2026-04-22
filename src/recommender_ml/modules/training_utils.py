@@ -1,12 +1,13 @@
 import ast
 import logging
 import os
+from collections import OrderedDict
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import pandas as pd
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from sklearn.model_selection import KFold
 from torch.utils.data import DataLoader, TensorDataset
 from recommender_ml.modules.Model import BaselineMovieRecommender
@@ -14,21 +15,22 @@ from recommender_ml.modules.ModelProd import ProdMovieRecommender
 
 logger = logging.getLogger(__name__)
 
+
 def bpr_loss_multi_neg(
-    user_vector: torch.Tensor,
-    target_movie: torch.Tensor,
-    movie_embedding: nn.Embedding,
-    num_neg_samples: int = 50,
+        user_vector: torch.Tensor,
+        target_movie: torch.Tensor,
+        movie_embedding: nn.Embedding,
+        num_neg_samples: int = 50,
 ) -> torch.Tensor:
     pos_emb = movie_embedding(target_movie)
-    pos_scores = (user_vector * pos_emb).sum(dim=-1, keepdim=True) # [B, 1]
+    pos_scores = (user_vector * pos_emb).sum(dim=-1, keepdim=True)  # [B, 1]
 
-    neg_ids = torch.randint(1, movie_embedding.num_embeddings, 
-                            (target_movie.size(0), num_neg_samples), 
+    neg_ids = torch.randint(1, movie_embedding.num_embeddings,
+                            (target_movie.size(0), num_neg_samples),
                             device=target_movie.device)
-    
-    neg_emb = movie_embedding(neg_ids) # [B, N, D]
-    neg_scores = torch.bmm(neg_emb, user_vector.unsqueeze(-1)).squeeze(-1) # [B, N]
+
+    neg_emb = movie_embedding(neg_ids)  # [B, N, D]
+    neg_scores = torch.bmm(neg_emb, user_vector.unsqueeze(-1)).squeeze(-1)  # [B, N]
 
     # Stable BPR using softplus: -log(sigmoid(x)) == softplus(-x)
     diff = pos_scores - neg_scores
@@ -61,9 +63,9 @@ def run_single_epoch(
 
         scaler.scale(loss).backward()
 
-        scaler.unscale_(optimizer) # Required for AMP before clipping
+        scaler.unscale_(optimizer)  # Required for AMP before clipping
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        
+
         scaler.step(optimizer)
         scaler.update()
 
@@ -71,6 +73,7 @@ def run_single_epoch(
         progress_bar.set_postfix(loss=f"{loss.item():.4f}")
 
     return total_loss / len(loader)
+
 
 def save_checkpoint(
         model: nn.Module,
@@ -95,7 +98,18 @@ def load_checkpoint(
         device: torch.device
 ) -> tuple[int, float]:
     checkpoint = torch.load(path, map_location=device)
-    model.load_state_dict(checkpoint["model_state"])
+    state_dict = checkpoint["model_state"]
+
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        if k.startswith("module."):
+            name = k[7:]
+        else:
+            name = k
+        new_state_dict[name] = v
+
+    model.load_state_dict(new_state_dict)
+
     optimizer.load_state_dict(checkpoint["optimizer_state"])
     start_epoch = checkpoint["epoch"] + 1
     loss = checkpoint["loss"]
@@ -148,7 +162,7 @@ def prepare_dataloader(user_timelines: pd.DataFrame, parameters: dict) -> DataLo
     train_loader = DataLoader(dataset,
                               batch_size=batch_size,
                               shuffle=True,
-                              num_workers=4,
+                              num_workers=0,
                               pin_memory=True)
     logger.info(f"Total Batches: {len(train_loader)}")
 
@@ -201,6 +215,7 @@ def recall_at_k(
     model.train()
     return hits / total
 
+
 def build_model(
         num_movies: int,
         num_genres: int,
@@ -208,7 +223,6 @@ def build_model(
         device: torch.device,
         model_type: str
 ) -> nn.Module:
-
     if model_type == "baseline":
         model = BaselineMovieRecommender(
             num_movies=num_movies,
@@ -222,9 +236,11 @@ def build_model(
         )
     model.to(device)
 
-    # if device.type == "cuda":
-    #     print("Using compiled model")
-    #     model = torch.compile(model)
+    if device.type == "cuda":
+        capability = torch.cuda.get_device_capability(device)
+        if capability[0] >= 7:
+            model = torch.compile(model)
+            logger.info("torch.compile enabled")
 
     return model
 
@@ -239,6 +255,7 @@ def build_optimizer(
         optimizer, mode='min', factor=0.5, patience=3, min_lr=1e-6
     )
     return optimizer, scheduler
+
 
 def train_with_early_stopping(
         train_df: pd.DataFrame,
@@ -301,6 +318,7 @@ def train_with_early_stopping(
     model.load_state_dict({k: v.to(device) for k, v in best_weights.items()})
     return model, best_epoch + 1, best_val_loss
 
+
 def run_kfold(
         user_timelines: pd.DataFrame,
         num_movies: int,
@@ -314,8 +332,11 @@ def run_kfold(
     kf = KFold(n_splits=k, shuffle=True, random_state=parameters.get("random_seed", 42))
 
     fold_scores = []
-
+    i = 0
     for fold, (train_idx, val_idx) in enumerate(kf.split(user_timelines)):
+        # if i == 0 or i == 1:
+        #     i+=1
+        #     continue
         logger.info(f"─── Fold {fold + 1}/{k} ───")
 
         fold_train_df = user_timelines.iloc[train_idx].reset_index(drop=True)
@@ -382,7 +403,6 @@ def train_final_model(
         )
         save_checkpoint(model, optimizer, epoch, avg_loss, checkpoint_path)
         logger.info(f"Final Epoch {epoch + 1}/{num_epochs} | Loss: {avg_loss:.4f}")
-
 
     logger.info("Production model training complete")
     return model
